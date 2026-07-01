@@ -6,7 +6,7 @@ import { profile as dbProfile } from 'db-vendo-client/p/dbnav/index.js';
 const client = createClient(dbProfile, 's6-tracker-gabor/1.0');
 const app = express();
 app.use(cors());
-app.use(express.static('public'));
+app.use(express.static('.'));
 
 const STOP_NAMES = { volksgarten: 'Düsseldorf-Volksgarten', essen: 'Essen Hbf' };
 let stopIds = {};
