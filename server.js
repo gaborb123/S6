@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { createClient } from 'db-vendo-client';
-import { profile as dbProfile } from 'db-vendo-client/p/dbnav/index.js';
+import { profile as dbProfile } from 'db-vendo-client/p/dbweb/index.js';
 
 const client = createClient(dbProfile, 's6-tracker-gabor/1.0');
 const app = express();
