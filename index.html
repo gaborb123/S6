@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S6 Tracker — Volksgarten ↔ Essen Hbf</title>
+<style>
+  :root{
+    --bg:#0a0d10; --panel:#12161b; --edge:#1f262d;
+    --amber:#f5a623; --amber-dim:#8a6420;
+    --green:#36d399; --red:#ff5d5d; --muted:#6e7a87; --text:#e9edf1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background: radial-gradient(circle at 50% -10%, #161c22 0%, var(--bg) 55%);
+    color:var(--text); font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    padding:16px 14px 40px; min-height:100vh;
+  }
+  .mono{ font-family:'JetBrains Mono','Space Mono','Courier New',monospace; }
+  .wrap{ max-width:520px; margin:0 auto; }
+
+  .sign{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; }
+  .sign h1{ font-size:.98rem; letter-spacing:.1em; text-transform:uppercase; margin:0; color:var(--muted); font-weight:600; }
+  .sign .clock{ font-family:'JetBrains Mono',monospace; color:var(--amber); font-size:.88rem; }
+
+  .switcher{ display:flex; background:var(--panel); border:1px solid var(--edge); border-radius:10px; padding:4px; margin-bottom:12px; gap:4px; }
+  .switcher button{ flex:1; border:none; background:transparent; color:var(--muted); padding:11px 8px; font-size:.84rem; font-weight:600; border-radius:7px; cursor:pointer; font-family:inherit; }
+  .switcher button.active{ background:linear-gradient(180deg,#1c232a,#161b20); color:var(--amber); box-shadow:inset 0 0 0 1px var(--amber-dim); }
+
+  .last-train{
+    text-align:center; font-size:.78rem; color:var(--muted); margin-bottom:12px;
+    background:var(--panel); border:1px solid var(--edge); border-radius:10px; padding:9px;
+  }
+  .last-train .t{ color:var(--amber); font-family:'JetBrains Mono',monospace; font-weight:700; }
+
+  .conn-banner{
+    display:none; background: rgba(255,93,93,0.12); border:1px solid rgba(255,93,93,0.4);
+    color:var(--red); border-radius:10px; padding:10px 12px; font-size:.78rem; margin-bottom:12px; line-height:1.5;
+  }
+  .conn-banner.show{ display:block; }
+  .service-hint{
+    display:none; background: rgba(245,166,35,0.1); border:1px solid var(--amber-dim);
+    color:var(--amber); border-radius:10px; padding:10px 12px; font-size:.78rem; margin-bottom:12px; line-height:1.5;
+  }
+  .service-hint.show{ display:block; }
+
+  .map-panel{ background:var(--panel); border:1px solid var(--edge); border-radius:14px; padding: 22px 18px 22px 0; position:relative; min-height: 360px; }
+  .track-area{ position:relative; padding-left: 92px; }
+  .track-line{ position:absolute; left: 78px; top: 8px; bottom: 8px; width: 3px; background: linear-gradient(180deg, var(--amber-dim), var(--edge) 90%); border-radius: 3px; }
+  .station{ position:relative; display:flex; align-items:center; min-height: 52px; }
+  .station .dot{ position:absolute; left: -19px; width:13px; height:13px; border-radius:50%; background: var(--bg); border: 2.5px solid var(--muted); z-index:2; }
+  .station.endpoint .dot{ border-color: var(--amber); width:16px; height:16px; left:-20.5px; }
+  .station .label{ font-size:.78rem; color:#c7cdd3; padding-left: 4px; }
+  .station.endpoint .label{ font-weight:700; color:var(--amber); font-size:.82rem; }
+
+  .train-marker{ position:absolute; left: -52px; transform: translateY(-50%); display:flex; align-items:center; gap:5px; z-index:3; transition: top 1.2s linear; }
+  .train-marker .pill{ background: radial-gradient(circle at 30% 25%, #ffc466, var(--amber) 70%); color:#1a1206; font-weight:800; font-size:.62rem; padding: 3px 6px; border-radius: 9px; font-family:'JetBrains Mono',monospace; box-shadow: 0 0 0 3px var(--panel), 0 2px 6px rgba(0,0,0,.4); white-space:nowrap; }
+  .train-marker.rev{ left:auto; right:-52px; flex-direction: row-reverse; }
+  .train-marker .arrow{ font-size:.7rem; color:var(--amber); }
+
+  .legend{ display:flex; gap:14px; margin-top:12px; font-size:.7rem; color:var(--muted); flex-wrap:wrap; }
+  .legend span{ display:flex; align-items:center; gap:5px; }
+  .legend .sw{ width:9px; height:9px; border-radius:50%; display:inline-block; }
+
+  .cancelled-panel{ margin-top: 12px; background:var(--panel); border:1px solid var(--edge); border-radius: 12px; padding: 12px 14px; display:none; }
+  .cancelled-panel.show{ display:block; }
+  .cancelled-panel h2{ font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--red); margin:0 0 8px; }
+  .cancelled-item{ font-size:.8rem; color:#dcc; padding: 4px 0; display:flex; justify-content:space-between; gap:10px; }
+  .cancelled-item .t{ font-family:'JetBrains Mono',monospace; color:var(--red); flex:0 0 auto; }
+
+  .meta-row{ display:flex; justify-content:space-between; align-items:center; margin:14px 4px 0; font-size:.7rem; color:var(--muted); }
+  .meta-row button{ background:none; border:1px solid var(--edge); color:var(--muted); padding:6px 12px; border-radius:7px; font-size:.72rem; cursor:pointer; font-family:inherit; }
+  .meta-row button:hover{ color:var(--amber); border-color:var(--amber-dim); }
+  .auto-dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); margin-right:6px; animation:pulse 2s infinite; }
+  @keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(54,211,153,.5);} 70%{box-shadow:0 0 0 6px rgba(54,211,153,0);} 100%{box-shadow:0 0 0 0 rgba(54,211,153,0);} }
+
+  .footer-note{ text-align:center; margin-top:16px; font-size:.68rem; color:var(--muted); line-height:1.6; }
+  .empty-track{ padding: 40px 14px; text-align:center; color:var(--muted); font-size:.82rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="sign">
+    <h1>S6 Tracker</h1>
+    <div class="clock mono" id="clock">--:--:--</div>
+  </div>
+
+  <div class="switcher">
+    <button id="btn-ve" class="active">Volksgarten → Essen</button>
+    <button id="btn-ev">Essen → Volksgarten</button>
+  </div>
+
+  <div class="last-train" id="last-train">Letzte Fahrt heute: <span class="t">…</span></div>
+
+  <div class="conn-banner" id="conn-banner"></div>
+  <div class="service-hint" id="service-hint"></div>
+
+  <div class="map-panel">
+    <div class="track-area" id="track-area">
+      <div class="empty-track">Strecke wird geladen …</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="sw" style="background:var(--amber)"></span> Zug (interpoliert)</span>
+    <span><span class="sw" style="background:var(--muted)"></span> Station</span>
+    <span><span class="sw" style="background:var(--red)"></span> Ausfall</span>
+  </div>
+
+  <div class="cancelled-panel" id="cancelled-panel">
+    <h2>Ausgefallene Fahrten</h2>
+    <div id="cancelled-list"></div>
+  </div>
+
+  <div class="meta-row">
+    <span><span class="auto-dot"></span>Live-Update</span>
+    <span id="updated">—</span>
+    <button id="refresh-btn">Aktualisieren</button>
+  </div>
+
+  <div class="footer-note">
+    Positionen sind zwischen den Echtzeit-Haltezeiten interpoliert, kein GPS.<br>
+    Eigenes Backend, eigene Datenquelle — unabhängig von externen Wrapper-Diensten.
+  </div>
+
+</div>
+
+<script>
+  let direction = 've';
+  let canonicalStations = null;
+  let activeTrips = [];
+  let fetchTimer = null, tickTimer = null;
+  let lastSuccess = null;
+
+  const clockEl = document.getElementById('clock');
+  const connBanner = document.getElementById('conn-banner');
+  const serviceHint = document.getElementById('service-hint');
+  const trackArea = document.getElementById('track-area');
+  const cancelledPanel = document.getElementById('cancelled-panel');
+  const cancelledList = document.getElementById('cancelled-list');
+  const updatedEl = document.getElementById('updated');
+  const lastTrainEl = document.querySelector('#last-train .t');
+  const btnVE = document.getElementById('btn-ve');
+  const btnEV = document.getElementById('btn-ev');
+
+  function tickClock(){ clockEl.textContent = new Date().toLocaleTimeString('de-DE'); }
+  tickClock(); setInterval(tickClock, 1000);
+
+  function fmtTime(iso){ return iso ? new Date(iso).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '–'; }
+
+  function showConnError(msg){
+    connBanner.textContent = '⚠️ Backend nicht erreichbar: ' + msg + (lastSuccess ? (' — letzter Stand ' + lastSuccess) : '');
+    connBanner.classList.add('show');
+  }
+  function clearConnError(){ connBanner.classList.remove('show'); }
+
+  function buildCanonical(trips){
+    let best = null;
+    trips.forEach(t => { if (!best || t.stopovers.length > best.length) best = t.stopovers; });
+    return best ? best.map(s => s.name) : null;
+  }
+  function matchIdx(name, canonical){
+    let idx = canonical.findIndex(n => n === name);
+    if (idx !== -1) return idx;
+    return canonical.findIndex(n => n && name && (n.includes(name) || name.includes(n)));
+  }
+
+  function renderTrack(){
+    if (!canonicalStations || !canonicalStations.length){
+      trackArea.innerHTML = '<div class="empty-track">Streckendaten gerade nicht verfügbar.</div>';
+      return;
+    }
+    const n = canonicalStations.length;
+    let html = '<div class="track-line"></div>';
+    canonicalStations.forEach((name, i) => {
+      const isEnd = i === 0 || i === n-1;
+      html += `<div class="station ${isEnd?'endpoint':''}"><div class="dot"></div><div class="label">${name}</div></div>`;
+    });
+    trackArea.innerHTML = html;
+    renderTrains();
+  }
+
+  function renderTrains(){
+    if (!canonicalStations) return;
+    trackArea.querySelectorAll('.train-marker').forEach(el => el.remove());
+    const stationEls = Array.from(trackArea.querySelectorAll('.station'));
+    if (!stationEls.length) return;
+    const trackTop = stationEls[0].offsetTop + stationEls[0].offsetHeight/2;
+    const stepHeight = stationEls.length > 1
+      ? (stationEls[stationEls.length-1].offsetTop - stationEls[0].offsetTop) / (stationEls.length-1)
+      : 0;
+    const now = Date.now();
+    let anyActive = false;
+
+    activeTrips.forEach(trip => {
+      const sos = trip.stopovers;
+      if (!sos || sos.length < 2) return;
+      let segIdx = -1;
+      for (let i=0;i<sos.length-1;i++){
+        const dep = sos[i].departure || sos[i].arrival;
+        const arr = sos[i+1].arrival || sos[i+1].departure;
+        if (!dep || !arr) continue;
+        const depT = new Date(dep).getTime(), arrT = new Date(arr).getTime();
+        if (now >= depT && now <= arrT){ segIdx = i; break; }
+        if (i===0 && now < depT){ segIdx = 0; break; }
+      }
+      if (segIdx === -1) return;
+      const a = sos[segIdx], b = sos[segIdx+1];
+      const aIdx = matchIdx(a.name, canonicalStations);
+      const bIdx = matchIdx(b.name, canonicalStations);
+      if (aIdx === -1 || bIdx === -1) return;
+      const depT = new Date(a.departure || a.arrival).getTime();
+      const arrT = new Date(b.arrival || b.departure).getTime();
+      let frac = 0;
+      if (arrT > depT) frac = Math.max(0, Math.min(1, (now - depT) / (arrT - depT)));
+      const posIdx = aIdx + (bIdx - aIdx) * frac;
+      const top = trackTop + posIdx * stepHeight;
+
+      anyActive = true;
+      const marker = document.createElement('div');
+      marker.className = 'train-marker' + (trip.direction === 'rev' ? ' rev' : '');
+      marker.style.top = top + 'px';
+      const arrow = trip.direction === 'rev' ? '◀' : '▶';
+      marker.innerHTML = `<span class="arrow">${arrow}</span><span class="pill">S6 · ${fmtTime(b.arrival || b.departure)}</span>`;
+      trackArea.appendChild(marker);
+    });
+
+    if (!anyActive){
+      serviceHint.textContent = 'Aktuell keine S6 im sichtbaren Streckenabschnitt erkannt — möglicherweise Betriebspause oder Ersatzverkehr.';
+      serviceHint.classList.add('show');
+    } else {
+      serviceHint.classList.remove('show');
+    }
+  }
+
+  function renderCancelled(list){
+    if (!list || !list.length){ cancelledPanel.classList.remove('show'); return; }
+    cancelledPanel.classList.add('show');
+    cancelledList.innerHTML = list.slice(0,6).map(c => `
+      <div class="cancelled-item"><span>S6 nach ${c.direction || '—'}</span><span class="t mono">${fmtTime(c.plannedWhen || c.when)}</span></div>
+    `).join('');
+  }
+
+  function setDirection(dir){
+    direction = dir;
+    btnVE.classList.toggle('active', dir === 've');
+    btnEV.classList.toggle('active', dir === 'ev');
+    canonicalStations = null;
+    load();
+  }
+  btnVE.addEventListener('click', () => setDirection('ve'));
+  btnEV.addEventListener('click', () => setDirection('ev'));
+  document.getElementById('refresh-btn').addEventListener('click', load);
+
+  async function load(){
+    try{
+      const res = await fetch(`/api/board?direction=${direction}`);
+      if (!res.ok){
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || ('HTTP ' + res.status));
+      }
+      const data = await res.json();
+      clearConnError();
+
+      activeTrips = data.trips.map(t => ({ stopovers: t.stopovers, direction: direction === 've' ? 'fwd' : 'rev' }));
+      if (!canonicalStations) canonicalStations = buildCanonical(data.trips);
+      renderTrack();
+      renderCancelled(data.cancelled);
+      lastTrainEl.textContent = data.lastTrainToday ? fmtTime(data.lastTrainToday) + ' Uhr' : 'unbekannt';
+
+      lastSuccess = new Date().toLocaleTimeString('de-DE');
+      updatedEl.textContent = 'Aktualisiert ' + lastSuccess;
+    } catch(err){
+      showConnError(err.message);
+      updatedEl.textContent = 'Fehler beim Laden';
+    }
+  }
+
+  function startTimers(){
+    if (fetchTimer) clearInterval(fetchTimer);
+    if (tickTimer) clearInterval(tickTimer);
+    fetchTimer = setInterval(load, 45000);
+    tickTimer = setInterval(renderTrains, 5000);
+  }
+
+  load();
+  startTimers();
+</script>
+</body>
+</html>
